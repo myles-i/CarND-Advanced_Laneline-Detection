@@ -10,8 +10,6 @@ with open('camera_coefficients.pickle', 'rb') as f:
     mtx, dist, rvecs, tvecs = pickle.load(f)
 
 # defined tuning parameters
-sobel_min = 40
-sobel_max = 80
 sobel_kernel = 5
 x_thresh = (20, 100)
 y_thresh = (20, 100)
@@ -54,23 +52,30 @@ def sobel_thresh(img, sobel_kernel=3, x_thresh = (0,255), y_thresh = (0,255), ab
     #compute gradients
     sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
     sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
+    # Create a binary image of ones where threshold is met, zeros otherwise
+    binary_output_x   = np.zeros_like(gray)
+    binary_output_y   = np.zeros_like(gray)
+    #apply thresholds
+    binary_output_x[(sobelx >= x_thresh[0]) & (sobelx <= x_thresh[1])] = 1
+    binary_output_y[(sobely >= y_thresh[0]) & (sobely <= y_thresh[1])] = 1
+
     # Calculate the gradient magnitude
     gradmag = np.sqrt(sobelx**2 + sobely**2)
     # Rescale to 8 bit
     scale_factor = np.max(gradmag)/255 
     gradmag = (gradmag/scale_factor).astype(np.uint8) 
+    # Create a binary image of ones where threshold is met, zeros otherwise
+    binary_output_mag = np.zeros_like(gray)
+    #apply thresholds
+    binary_output_mag[(gradmag >= abs_thresh[0]) & (gradmag <= abs_thresh[1])] = 1
+
+
     #calculate gradient direction
     absgraddir = np.arctan2(np.absolute(sobely), np.absolute(sobelx))
     # Create a binary image of ones where threshold is met, zeros otherwise
-    binary_output_x   = np.zeros_like(gradmag)
-    binary_output_y   = np.zeros_like(gradmag)
-    binary_output_mag = np.zeros_like(gradmag)
-    binary_output_dir = np.zeros_like(gradmag)
+    binary_output_dir = np.zeros_like(gray)
     #apply thresholds
-    binary_output_mag[(gradmag >= abs_thresh[0]) & (gradmag <= abs_thresh[1])] = 1
     binary_output_dir[(absgraddir >= dir_thresh[0]) & (absgraddir <= dir_thresh[1])] = 1
-    binary_output_x[(sobelx >= x_thresh[0]) & (sobelx <= x_thresh[1])] = 1
-    binary_output_y[(sobely >= y_thresh[0]) & (sobely <= y_thresh[1])] = 1
 
     return binary_output_x, binary_output_y, binary_output_mag, binary_output_dir
 
@@ -245,7 +250,7 @@ def find_line_pixels_histogram(binary_warped, visualize = False):
 	rightx = nonzerox[right_lane_inds]
 	righty = nonzeroy[right_lane_inds] 
 
-	return leftx,lefty,rightx,righty
+	return leftx,lefty,rightx,righty, out_img
 
 def find_line_pixels_from_prev(binary_warped):
 	nonzero = binary_warped.nonzero()
@@ -320,9 +325,11 @@ class Extra_Outputs():
         self.binary_img = None
         #radius of curvature of the line in some units
         self.warped_binary_img = None 
-        # detected line pixels x position
+        # sliding box image laneline pixel detection
+        self.sliding_box_img = None
+        # detected laneline images
         self.plotted_laneline_img = None 
-        # detected line pixels y position
+        # offset from center
         self.offset_from_center = None 
 outputs = Extra_Outputs()
 def detect_lines(img):
@@ -335,7 +342,7 @@ def detect_lines(img):
 
 	# detect line pixels
 	if (left_line.undetected_iterations > max_undetected or right_line.undetected_iterations > max_undetected):
-		left_line.allx,left_line.ally,right_line.allx,right_line.ally = find_line_pixels_histogram(outputs.warped_binary_img)
+		left_line.allx,left_line.ally,right_line.allx,right_line.ally, outputs.sliding_box_img = find_line_pixels_histogram(outputs.warped_binary_img)
 	else:
 		left_line.allx,left_line.ally,right_line.allx,right_line.ally = find_line_pixels_from_prev(outputs.warped_binary_img)
 
