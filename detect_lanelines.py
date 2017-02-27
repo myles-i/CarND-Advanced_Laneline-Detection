@@ -21,10 +21,10 @@ hls_thresh = (90, 255)
 buffer_pixels = 40
 bottom_left_x = 244 - buffer_pixels
 bottom_right_x = 1060 + buffer_pixels
-top_left_x = 596 - buffer_pixels
-top_right_x = 688 + buffer_pixels
+top_left_x = 596 + 15- buffer_pixels
+top_right_x = 688 - 15 + buffer_pixels
 bottom_y = 680
-top_y = 468
+top_y = 468 - 9
 src = np.array([[bottom_left_x, bottom_y],[top_left_x, top_y], 
                       [top_right_x, top_y],[bottom_right_x, bottom_y]], 
                       dtype = np.float32)
@@ -275,7 +275,7 @@ def process_lane_pixels(leftx,lefty,rightx,righty):
 
 	# Define conversions in x and y from pixels space to meters
 	ym_per_pix = 30/720 # meters per pixel in y dimension
-	xm_per_pix = 3.7/700 # meters per pixel in x dimension
+	xm_per_pix = 3.7/(bottom_right_x - bottom_left_x - 2*buffer_pixels) # meters per pixel in x dimension
 
 	# Fit new polynomials to x,y in world space
 	left_fit_cr = np.polyfit(lefty*ym_per_pix, leftx*xm_per_pix, 2)
@@ -351,7 +351,7 @@ def detect_lines(img):
 	process_lane_pixels(left_line.allx,left_line.ally,right_line.allx,right_line.ally)
 	
 	# perform sanity check on results and discard if bad
-	alpha = 0.8 #for first order filter
+	alpha = 0.6 #for first order filter
 	if check_if_fit_good(left_fit, right_fit, left_curverad, right_curverad) or outputs.offset_from_center == None: # if first pass, initialize at least
 		if outputs.offset_from_center == None: #initial pass, so don't filter
 			outputs.offset_from_center = dist_from_center
@@ -364,15 +364,15 @@ def detect_lines(img):
 			right_line.current_fit = right_fit
 			right_line.radius_of_curvature = right_curverad 
 		else:
-			outputs.offset_from_center = outputs.offset_from_center*alpha + (1-alpha)*dist_from_center
+			outputs.offset_from_center = outputs.offset_from_center*.95 + (1-.95)*dist_from_center
 
 			left_line.undetected_iterations = 0
 			left_line.current_fit = left_line.current_fit*alpha + (1-alpha)*left_fit
-			left_line.radius_of_curvature = left_line.radius_of_curvature*alpha + (1-alpha)*left_curverad 
+			left_line.radius_of_curvature = left_line.radius_of_curvature*.95 + (1-.95)*left_curverad 
 
 			right_line.undetected_iterations = 0
 			right_line.current_fit = right_line.current_fit*alpha + (1-alpha)*right_fit
-			right_line.radius_of_curvature = right_line.radius_of_curvature*alpha + (1-alpha)*right_curverad 
+			right_line.radius_of_curvature = right_line.radius_of_curvature*.95 + (1-.95)*right_curverad 
 
 	else:
 		left_line.undetected_iterations += 1
@@ -383,15 +383,20 @@ def detect_lines(img):
 		right_line.current_fit = right_line.best_fit_prev
 		# don't update radius of curcature
 	outputs.plotted_laneline_img = plot_lane_on_image(outputs.warped_binary_img,outputs.distortion_correct_img)
+
+	radius_text = "Esimated Radius of Curvature (meters): " + str((left_line.radius_of_curvature + right_line.radius_of_curvature)/2)
+	offcenter_text = "Distance From center (meters): " + str(outputs.offset_from_center)
+	cv2.putText(outputs.plotted_laneline_img,radius_text, (20,50), cv2.FONT_HERSHEY_SIMPLEX,1,(0,0,0),thickness = 3)
+	cv2.putText(outputs.plotted_laneline_img,offcenter_text, (20,100), cv2.FONT_HERSHEY_SIMPLEX,1,(0,0,0),thickness = 3)
 	return outputs.plotted_laneline_img
 
 
 
 
 	self.original_img = 1000#initialize to large non-zero  
-	#prev best fit polynomial fit
+	# prev best fit polynomial fit
 	self.distortion_correct_img = None  
-	#polynomial coefficients for the most recent fit
+	# polynomial coefficients for the most recent fit
 	self.binary_img = None
 	#radius of curvature of the line in some units
 	self.warped_binary_img = None 
@@ -417,6 +422,8 @@ def tester(img_name):
 	plt.subplot(3,2,4)
 	plt.imshow(outputs.warped_binary_img, cmap='gray')
 	plt.subplot(3,2,5)
+
+
 	plt.imshow(cv2.cvtColor(outputs.plotted_laneline_img, cv2.COLOR_BGR2RGB))
 
 	plt.show(block = False)
@@ -425,7 +432,10 @@ def tester(img_name):
 	print(left_line.radius_of_curvature, 'm', right_line.radius_of_curvature, 'm')
 	print(outputs.offset_from_center, 'm')
 
+
 from moviepy.editor import VideoFileClip
+
+
 def test_on_video(vid_name):
 	output_name = "output_" + vid_name
 	clip1 = VideoFileClip(vid_name)
